@@ -4,12 +4,6 @@ import requests
 import os
 import zipfile
 
-vis_params_bw = {
-    'min': 0,
-    'max': 255,
-    'palette': ['black', 'white']
-}
-
 def combine_bands(image):
     # Calculate the mean of the three bands
     combined_band = image.expression(
@@ -19,14 +13,18 @@ def combine_bands(image):
             'b3': image.select('B3')
         }).rename('combinedBand')
 
-    # Normalize the combined band
+    # Normalize the combined band, by applying a reducer to find the max min of the entire region
+    # Returns the a max and min
     min_max = combined_band.reduceRegion(ee.Reducer.minMax())
 
+    #Pulls the max and min property
     min_val = ee.Number(min_max.get('combinedBand_min'))
     max_val = ee.Number(min_max.get('combinedBand_max'))
 
+    # Applies the filter by setting the scale to the min and max, then turns it into 8-byte to display
     normalized_combined_band = combined_band.unitScale(min_val, max_val).multiply(255).toByte()
 
+    # Returns the combined bands as a property
     return image.addBands(normalized_combined_band)
 
 
@@ -86,26 +84,26 @@ for year in range(1999,2013):
         except Exception as e:
             print("Failed to get Download URL")
 
-        # #names each file 
-        # filename = f"data_{i}.zip"
-        # filepath = os.path.join(save_folder, filename)
-        # print(f"Downloading to: {filepath}, {i} in Filtered Count")
-        # try:
-        #     #Download and saves the image
-        #     with open(filepath, 'wb') as f:
-        #         f.write(r.content)
-        # except Exception as e:
-        #     print(f"Error failure to download")
-        # try:
-        #     with zipfile.ZipFile(filepath) as f:
-        #         files = f.namelist()
-        #         f.extractall(save_folder)
-        #     os.remove(filepath)
-        #     print(f"Downloaded {filename}")
-        #     print(f'Extracted {files} tif files from {filename}')
-        # except zipfile.BadZipFile:
-        #     print('Skipping - Not a valid ZIP file')
-        # except Exception as e:
-        #     print('Error extracting')
+        #names each file 
+        filename = f"data_{i}.zip"
+        filepath = os.path.join(save_folder, filename)
+        print(f"Downloading to: {filepath}, {i} in Filtered Count")
+        try:
+            #Download and saves the image
+            with open(filepath, 'wb') as f:
+                f.write(r.content)
+        except Exception as e:
+            print(f"Error failure to download")
+        try:
+            with zipfile.ZipFile(filepath) as f:
+                files = f.namelist()
+                f.extractall(save_folder)
+            os.remove(filepath)
+            print(f"Downloaded {filename}")
+            print(f'Extracted {files} tif files from {filename}')
+        except zipfile.BadZipFile:
+            print('Skipping - Not a valid ZIP file')
+        except Exception as e:
+            print('Error extracting')
 
 print("Downloading complete")
