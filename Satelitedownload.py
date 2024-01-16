@@ -1,7 +1,12 @@
+"""Imports Google earth engine to get images."""
 import ee
+# Initializes the import to get functionality
 ee.Initialize()
+"""In conjunction with EE in order to download files"""
 import requests
+"""Module providing a function printing python version."""
 import os
+"""Module providing a function printing python version."""
 import zipfile
 
 def combine_bands(image):
