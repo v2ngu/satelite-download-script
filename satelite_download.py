@@ -1,21 +1,25 @@
-"""Imports Google earth engine to get images."""
+"""This script is used to download satelites images from Google Earth Engine."""
+import os
+import zipfile
 import ee
+import requests
+
 # Initializes the import to get functionality
 ee.Initialize()
-"""In conjunction with EE in order to download files"""
-import requests
-"""Module providing a function printing python version."""
-import os
-"""Module providing a function printing python version."""
-import zipfile
+# ee.Authenticate()
 
-def combine_bands(image):
+
+def combine_bands(image_object):
+    """ This method combines the bands of images together
+
+    Creates combined_bands as a expression of bands(images) added together
+    """
     # Calculate the mean of the three bands
     combined_band = image.expression(
         '(b1 + b2 + b3) / 3', {
-            'b1': image.select('B1'),
-            'b2': image.select('B2'),
-            'b3': image.select('B3')
+            'b1': image_object.select('B1'),
+            'b2': image_object.select('B2'),
+            'b3': image_object.select('B3')
         }).rename('combinedBand')
 
     # Normalize the combined band, by applying a reducer to find the max min of the entire region
@@ -26,11 +30,12 @@ def combine_bands(image):
     min_val = ee.Number(min_max.get('combinedBand_min'))
     max_val = ee.Number(min_max.get('combinedBand_max'))
 
-    # Applies the filter by setting the scale to the min and max, then turns it into 8-byte to display
+    #Applies the filter by setting the scale to the min and max,
+    # then turns it into 8-byte to display
     normalized_combined_band = combined_band.unitScale(min_val, max_val).multiply(255).toByte()
 
     # Returns the combined bands as a property
-    return image.addBands(normalized_combined_band)
+    return image_object.addBands(normalized_combined_band)
 
 
 
@@ -38,12 +43,15 @@ def combine_bands(image):
 #Creates a geometry object with cordinates of RnkUmmi
 geometry = ee.Geometry.Rectangle([-52.89, 71.55, -51.43, 71.82])
 
-data_product = 'LANDSAT/LE07/C01/T1'
-sel_bands = ['B1','B2','B3']
+DATA_PRODUCT = 'LANDSAT/LE07/C01/T1'
+SEL_BANDS = ['B1','B2','B3']
+
+
+#current dir
+CURRENT_DIR = os.path.dirname(__file__)
 
 #creates a temp folder to download the images to
-save_folder = 'RnkUmmi_Landsat-7-test'
-os.makedirs(save_folder, exist_ok=True)
+SAVE_FOLDER = os.path.join(CURRENT_DIR,'RnkUmmi_Landsat-7')
 
 #For loops that traverses all the years sequentially
 for year in range(1999,2013):
@@ -51,23 +59,26 @@ for year in range(1999,2013):
     end = ee.Date(f'{year}-09-10')
 
     #This is a imageCollection object that has all the filters applied
-    #Creates a new collection everytime there is a new year 
+    #Creates a new collection everytime there is a new year
     filteredCollection = (
-        ee.ImageCollection(data_product)
+        ee.ImageCollection(DATA_PRODUCT)
         .filterBounds(geometry)
         .filterDate(start, end)
-        .select(sel_bands)
+        .select(SEL_BANDS)
         .filterMetadata('CLOUD_COVER', 'less_than', 30)
-    ) 
-    
+    )
 
     #Why is this list created? Its an object that holds pictures. Just need the pictures
     filtered_list=filteredCollection.toList(filteredCollection.size())
 
-    #gets the count of the list 
+    #gets the count of the list
     filteredCount = filtered_list.size().getInfo()
-    print("Filtered count is %d"%(filteredCount))
-    print(f"year is {year}, {start.format('YYYY-MM-dd').getInfo()} and {end.format('YYYY-MM-dd').getInfo()}")
+    print(f"Filtered count is {filteredCount}")
+    print(
+    f"year is {year}, "
+    f"{start.format('yyyy-MM-dd').getInfo()}" 
+    f" and {end.format('yyyy-MM-dd').getInfo()}"
+    )
     # for loop that traveses all the pictures in the list
     for i in range(filteredCount):
         #Make sure the list are inside the geometry object
@@ -75,35 +86,35 @@ for year in range(1999,2013):
         #Prints and formats the name of the GeoTIFF that is being downloaded
         fname = image.get('system:id').getInfo().split('/')[-1]
 
-        image = combine_bands(image) 
-        print("downloading %s"%fname)
-
+        image = combine_bands(image)
+        print(f"Downloading {fname}")
         try:
             #creates the download url for the image
             url = image.getDownloadURL()
-
             #makes a request to download the image
             r=requests.get(url)
-
-            print(url)
+        except ConnectionError as e:
+            print(f"Connection error: {e}")
+        except TimeoutError as e:
+            print(f"Time out error: {e}")
         except Exception as e:
-            print("Failed to get Download URL")
+            print(f"Failed to get Download URL: {e}")
 
-        #names each file 
+        #names each file
         filename = f"data_{i}.zip"
-        filepath = os.path.join(save_folder, filename)
+        filepath = os.path.join(SAVE_FOLDER, filename)
         print(f"Downloading to: {filepath}, {i} in Filtered Count")
         try:
             #Download and saves the image
             with open(filepath, 'wb') as f:
                 f.write(r.content)
         except Exception as e:
-            print(f"Error failure to download")
+            print("Error failure to download")
         try:
             with zipfile.ZipFile(filepath) as f:
                 files = f.namelist()
-                f.extractall(save_folder)
-            os.remove(filepath)
+                f.extractall(SAVE_FOLDER)
+                os.remove(filepath)
             print(f"Downloaded {filename}")
             print(f'Extracted {files} tif files from {filename}')
         except zipfile.BadZipFile:
@@ -111,4 +122,6 @@ for year in range(1999,2013):
         except Exception as e:
             print('Error extracting')
 
+
+os.close()
 print("Downloading complete")
