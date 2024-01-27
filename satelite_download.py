@@ -3,6 +3,7 @@ import os
 import zipfile
 import ee
 import requests
+from PIL import Image
 
 # Initializes the import to get functionality
 ee.Initialize()
